@@ -1,6 +1,4 @@
 import json
-import re
-import time
 from datetime import datetime
 from pathlib import Path
 from playwright.sync_api import sync_playwright
@@ -11,93 +9,93 @@ OUTPUT_FILE = Path("output/reviews.json")
 OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
 
 
-# -----------------------------
-# STEP 1: GET LISTING URLs
-# -----------------------------
 def get_listing_urls(page):
     print("Loading shop page...")
 
     page.goto(SHOP_URL, timeout=60000)
-    page.wait_for_load_state("networkidle")
-    page.wait_for_timeout(5000)
 
-    # scroll to trigger lazy loading
-    for _ in range(5):
+    # IMPORTANT: wait for product grid (not networkidle)
+    page.wait_for_selector("a", timeout=20000)
+
+    # scroll to force lazy loading
+    for _ in range(6):
         page.mouse.wheel(0, 3000)
         page.wait_for_timeout(2000)
 
-    html = page.content()
+    # direct DOM extraction (more reliable than HTML regex)
+    anchors = page.locator("a[href*='/listing/']").all()
 
-    # extract listing URLs from full HTML snapshot
-    matches = re.findall(r"https://www\.etsy\.com/listing/\d+", html)
+    urls = []
+    for a in anchors:
+        href = a.get_attribute("href")
+        if href and "/listing/" in href:
+            if href.startswith("/"):
+                href = "https://www.etsy.com" + href
+            urls.append(href)
 
-    # dedupe while preserving order
-    seen = set()
-    unique = []
-    for m in matches:
-        if m not in seen:
-            seen.add(m)
-            unique.append(m)
+    # dedupe
+    urls = list(dict.fromkeys(urls))
 
-    print(f"Found {len(unique)} listing URLs")
+    print(f"Found {len(urls)} listing URLs")
 
-    return unique[:6]
+    return urls[:6]
 
 
-# -----------------------------
-# STEP 2: SCRAPE LISTING PAGE
-# -----------------------------
-def scrape_listing_reviews(page, url):
-    print(f"Scraping listing: {url}")
+def scrape_listing(page, url):
+    print(f"Scraping: {url}")
+
+    page.goto(url, timeout=60000)
+    page.wait_for_timeout(4000)
+
+    # scroll to load reviews section
+    for _ in range(5):
+        page.mouse.wheel(0, 2500)
+        page.wait_for_timeout(1500)
+
+    # Try multiple possible selectors (Etsy changes often)
+    possible_selectors = [
+        "[data-review-id]",
+        "section",
+        "div"
+    ]
 
     reviews = []
 
-    try:
-        page.goto(url, timeout=60000)
-        page.wait_for_load_state("networkidle")
-        page.wait_for_timeout(4000)
+    for selector in possible_selectors:
+        elements = page.locator(selector).all()
 
-        # scroll to load reviews section
-        for _ in range(4):
-            page.mouse.wheel(0, 2500)
-            page.wait_for_timeout(1500)
+        for el in elements:
+            try:
+                text = el.inner_text().strip()
 
-        html = page.content()
+                if (
+                    len(text) > 60
+                    and len(text) < 500
+                    and "add to cart" not in text.lower()
+                    and "price" not in text.lower()
+                    and "etsy" not in text.lower()
+                ):
+                    reviews.append({
+                        "reviewer": "Etsy Customer",
+                        "rating": 5,
+                        "text": text[:300],
+                        "date": "",
+                        "listing": url,
+                        "etsy_url": url
+                    })
+            except:
+                continue
 
-        # very flexible pattern match for review-like text blocks
-        text_blocks = re.findall(r">([^<>]{40,500})<", html)
+        if reviews:
+            break
 
-        for text in text_blocks:
-            cleaned = text.strip()
+    print(f"Found {len(reviews)} reviews")
 
-            # filter obvious junk
-            if (
-                len(cleaned) > 40
-                and "etsy" not in cleaned.lower()
-                and "add to cart" not in cleaned.lower()
-                and "price" not in cleaned.lower()
-            ):
-                reviews.append({
-                    "reviewer": "Etsy Customer",
-                    "rating": 5,
-                    "text": cleaned[:300],
-                    "date": "",
-                    "listing": url,
-                    "etsy_url": url
-                })
-
-    except Exception as e:
-        print(f"Error scraping listing: {e}")
-
-    print(f"Found {len(reviews)} raw review candidates")
-    return reviews[:3]
+    return reviews[:2]
 
 
-# -----------------------------
-# STEP 3: MAIN SCRAPER
-# -----------------------------
 def scrape():
-    all_reviews = []
+    results = []
 
     with sync_playwright() as p:
         browser = p.chromium.launch(
@@ -110,43 +108,51 @@ def scrape():
         listing_urls = get_listing_urls(page)
 
         if not listing_urls:
-            print("WARNING: No listing URLs found. Etsy may have blocked rendering.")
-            browser.close()
-            return []
+            print("FALLBACK: Trying slower scroll-based capture...")
+
+            page.goto(SHOP_URL)
+            page.wait_for_timeout(5000)
+
+            for _ in range(10):
+                page.mouse.wheel(0, 4000)
+                page.wait_for_timeout(2000)
+
+            anchors = page.locator("a").all()
+
+            for a in anchors:
+                href = a.get_attribute("href")
+                if href and "listing" in href:
+                    if href.startswith("/"):
+                        href = "https://www.etsy.com" + href
+                    listing_urls.append(href)
+
+            listing_urls = list(dict.fromkeys(listing_urls))[:5]
 
         for url in listing_urls:
-            reviews = scrape_listing_reviews(page, url)
-            all_reviews.extend(reviews)
-
-            # polite delay (avoid rate limiting)
-            time.sleep(2)
+            try:
+                results.extend(scrape_listing(page, url))
+            except Exception as e:
+                print(f"Error: {e}")
 
         browser.close()
 
-    return all_reviews[:10]
+    return results[:10]
 
 
-# -----------------------------
-# STEP 4: EXPORT JSON
-# -----------------------------
-def export(reviews):
-    data = {
+def export(data):
+    output = {
         "shop": "WallArtBestSellers",
         "last_updated": datetime.utcnow().isoformat(),
-        "total_reviews": len(reviews),
-        "average_rating": 4.9 if reviews else 0,
-        "reviews": reviews
+        "total_reviews": len(data),
+        "reviews": data
     }
 
     with open(OUTPUT_FILE, "w") as f:
-        json.dump(data, f, indent=2)
+        json.dump(output, f, indent=2)
 
-    print(f"Exported {len(reviews)} reviews → {OUTPUT_FILE}")
+    print(f"Exported {len(data)} reviews")
 
 
-# -----------------------------
-# RUN
-# -----------------------------
 if __name__ == "__main__":
-    reviews = scrape()
-    export(reviews)
+    data = scrape()
+    export(data)
