@@ -2,11 +2,14 @@ name: Update Etsy Reviews
 
 on:
   schedule:
-    - cron: "0 3 * * *"  # once per day
+    - cron: "0 3 * * *"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
-  scrape:
+  build:
     runs-on: ubuntu-latest
 
     steps:
@@ -20,17 +23,16 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install playwright beautifulsoup4
-          playwright install
+          python -m pip install --upgrade pip
 
       - name: Run scraper
         run: |
           python scraper/scraper.py
 
-      - name: Commit results
+      - name: Commit changes
         run: |
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add output/reviews.json
           git commit -m "Update reviews" || echo "No changes"
           git push
