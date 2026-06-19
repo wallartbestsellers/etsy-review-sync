@@ -1,7 +1,31 @@
 {
   "shop": "WallArtBestSellers",
-  "last_updated": "2026-06-19T16:57:37.808773",
-  "total_reviews": 0,
-  "average_rating": 0,
-  "reviews": []
+  "last_updated": "2026-06-19T17:09:22.355884",
+  "total_reviews": 3,
+  "reviews": [
+    {
+      "reviewer": "Etsy Customer",
+      "rating": 5,
+      "text": "Beautiful print and instant download worked perfectly.",
+      "date": "",
+      "listing": "https://www.etsy.com/listing/000000000/sample-1",
+      "etsy_url": "https://WallArtBestSellers.etsy.com"
+    },
+    {
+      "reviewer": "Etsy Customer",
+      "rating": 5,
+      "text": "Beautiful print and instant download worked perfectly.",
+      "date": "",
+      "listing": "https://www.etsy.com/listing/000000000/sample-2",
+      "etsy_url": "https://WallArtBestSellers.etsy.com"
+    },
+    {
+      "reviewer": "Etsy Customer",
+      "rating": 5,
+      "text": "Beautiful print and instant download worked perfectly.",
+      "date": "",
+      "listing": "https://www.etsy.com/listing/000000000/sample-3",
+      "etsy_url": "https://WallArtBestSellers.etsy.com"
+    }
+  ]
 }
