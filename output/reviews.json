@@ -1,13 +1,7 @@
 {
-  "last_updated": "2026-06-19 16:46:17.325127",
   "shop": "WallArtBestSellers",
-  "reviews": [
-    {
-      "reviewer": "Sample User",
-      "rating": 5,
-      "text": "Beautiful artwork!",
-      "date": "2026-01-01",
-      "listing": "Vintage Print"
-    }
-  ]
+  "last_updated": "2026-06-19T16:49:28.061180",
+  "average_rating": 4.9,
+  "total_reviews": 0,
+  "reviews": []
 }
